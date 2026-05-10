@@ -105,16 +105,22 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     email = payload.email
     password = payload.password
 
+    attempts = redis_client.get(f"attempts_passwd:{email}")
+    if attempts and int(attempts)>5:
+        return JSONResponse(content={'error':'Rate Limit Exceeded, Try after 3 hours'}, status_code=429)
+
     if not email or not password:
         return JSONResponse(content={'error':'Email and password are required.'}, status_code=400)
     
-    user = await db.execute(select(User).where(User.email == email))
-    if not user.scalar_one_or_none(): 
+    user = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
+    if not user: 
+        auth_service.increment_login_attempts(email)
         return JSONResponse(content={'error':'"Wrong credentials. Try again.'}, status_code=401)
     
     result = auth_service.verify_password(password, user.password_hash)
 
     if not result:
+        auth_service.increment_login_attempts(email)
         return JSONResponse(content={'error':'"Wrong credentials. Try again.'}, status_code=401)
     
     token = jwt_service.create_access_token(data={'sub':str(user.id)})
@@ -130,4 +136,5 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
         value=token,
     )
 
+    redis_client.delete(f"attempts_passwd:{email}")
     return response
