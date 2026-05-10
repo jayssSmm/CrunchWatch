@@ -1,5 +1,8 @@
-from fastapi import APIRouter, Request
-from app.extension import templates, redis_client
+from fastapi import APIRouter, Request, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from app.extension import templates, redis_client, get_db
+from app.schema import RegisterRequest, VerifyOTPRequest
 from fastapi.responses import JSONResponse
 from app.models.user import User
 from app.services import otp_service, auth_service, mail_services
@@ -21,28 +24,21 @@ async def register(request:Request):
         {"request":request}, 
     )
 
-@router.post('register')
-async def register_person(request:Request):
-    data =  await request.json()
-    name = data.get('name').strip().lower()
-    email = data.get('email').strip().lower()
-    passwd = data.get('password')
+@router.post('/register')
+async def register_person(payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    name = payload.name.lower()
+    email = payload.email.strip().lower()
 
-    if not name or not email or not passwd:
-        return JSONResponse(content={"error": "Full name, email, and password are required."}, status_code=400)
-    
-    existing_user = db.session.execute(
-        db.select(User).filter_by(email=email)
-    ).scalar_one_or_none()
+    result = await db.execute(select(User).where(User.email == email))
+    existing_user = result.scalar_one_or_none()
     if existing_user:
         return JSONResponse(content={"error": "This email is already registered."}, status_code=409)
-    
-    otp = otp_service.generate_otp()
 
+    otp = otp_service.generate_otp()
     pending = {
         "name": name,
         "email": email,
-        "password_hash": auth_service.hash_password(passwd),
+        "password_hash": auth_service.hash_password(payload.password),
         "otp": otp,
     }
     redis_client.setex(f"otp:{email}", otp_service.OTP_TTL, json.dumps(pending))
@@ -50,33 +46,34 @@ async def register_person(request:Request):
     mail_services.send_otp(
         receiver_email=email,
         receiver_name=name,
-        expire_time= otp_service.OTP_TTL // 60,   # 10 min
+        expire_time=otp_service.OTP_TTL // 60,
         otp_code=otp
     )
 
-    return JSONResponse(content={"ok": True},status_code=200)
+    return JSONResponse(content={"ok": True}, status_code=200)
 
 @router.post('/verify-otp')
-async def verifyOtp(request:Request):
+async def verify_otp(request: Request, db: AsyncSession = Depends(get_db)):
     data = await request.json()
-    email =  data.get('email','').strip().lower()
+    email = data.get('email', '').strip().lower()
     entered_otp = data.get('otp')
 
     raw = redis_client.get(f"otp:{email}")
     if not raw:
         return JSONResponse(content={"error": "OTP expired. Please register again."}, status_code=410)
-    
+
     pending = json.loads(raw)
 
     if str(entered_otp) != str(pending.get('otp')):
         return JSONResponse(content={"error": "Invalid OTP. Please try again."}, status_code=400)
-    
+
     new_user = User(
-        full_name=pending['full_name'],
+        name=pending['name'],           # matches what you stored
         email=pending['email'],
         password_hash=pending['password_hash']
     )
-    db.session.add(new_user)
-    db.session.commit()
+    db.add(new_user)
+    await db.commit()
 
     redis_client.delete(f"otp:{email}")
+    return JSONResponse(content={"ok": True}, status_code=200)
