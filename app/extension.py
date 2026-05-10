@@ -4,7 +4,7 @@ from pathlib import Path
 import redis
 import os
 from dotenv import loadenv
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 loadenv()
 
@@ -20,7 +20,8 @@ redis_client = redis.Redis.from_url(
     decode_responses=True
 )
 
-engine = create_async_engine(DATABASE_URL)
+engine = create_async_engine(database_url)
+AsyncSessionLocal = async_sessionmaker(engine)
 
 async def get_db():
     async with AsyncSessionLocal() as session:

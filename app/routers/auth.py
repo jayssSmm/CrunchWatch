@@ -2,10 +2,10 @@ from fastapi import APIRouter, Request, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.extension import templates, redis_client, get_db
-from app.schema import RegisterRequest, VerifyOTPRequest
+from app.schema import RegisterRequest, VerifyOTPRequest, LoginRequest
 from fastapi.responses import JSONResponse
 from app.models.user import User
-from app.services import otp_service, auth_service, mail_services
+from app.services import otp_service, auth_service, mail_services, jwt_service
 import json
 
 router = APIRouter()
@@ -53,10 +53,9 @@ async def register_person(payload: RegisterRequest, db: AsyncSession = Depends(g
     return JSONResponse(content={"ok": True}, status_code=200)
 
 @router.post('/verify-otp')
-async def verify_otp(request: Request, db: AsyncSession = Depends(get_db)):
-    data = await request.json()
-    email = data.get('email', '').strip().lower()
-    entered_otp = data.get('otp')
+async def verify_otp(payload: VerifyOTPRequest, db: AsyncSession = Depends(get_db)):
+    email = payload.email
+    entered_otp = payload.otp
 
     raw = redis_client.get(f"otp:{email}")
     if not raw:
@@ -75,5 +74,50 @@ async def verify_otp(request: Request, db: AsyncSession = Depends(get_db)):
     db.add(new_user)
     await db.commit()
 
+    token = jwt_service.create_access_token(data={'sub':str(new_user.id)})
+    response = JSONResponse(content={"ok": True}, status_code=200)
+
+    response.set_cookie(
+        key='access_token',
+        value=token,
+        max_age=3600,
+        expires=3600,
+        httponly=True,
+        path='/',
+        secure=True,
+    )
+
     redis_client.delete(f"otp:{email}")
-    return JSONResponse(content={"ok": True}, status_code=200)
+    return response
+
+@router.post('/login')
+async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
+    email = payload.email
+    password = payload.password
+
+    if not email or not password:
+        return JSONResponse(content={'error':'Email and password are required.'}, status_code=400)
+    
+    user = await db.execute(select(User).where(User.email == email))
+    if not user.scalar_one_or_none(): 
+        return JSONResponse(content={'error':'"Wrong credentials. Try again.'}, status_code=401)
+    
+    result = auth_service.verify_password(password, user.password_hash)
+
+    if not result:
+        return JSONResponse(content={'error':'"Wrong credentials. Try again.'}, status_code=401)
+    
+    token = jwt_service.create_access_token(data={'sub':str(user.id)})
+    response = JSONResponse(content={'ok':True},status_code=200)
+
+    response.set_cookie(
+        key='access_token',
+        path='/',
+        httponly=True,
+        secure=True,
+        max_age=3600,
+        expires=3600,
+        value=token,
+    )
+
+    return response
