@@ -57,6 +57,10 @@ async def verify_otp(payload: VerifyOTPRequest, db: AsyncSession = Depends(get_d
     email = payload.email
     entered_otp = payload.otp
 
+    attempts = redis_client.get(f"attempts_otp:{email}")
+    if attempts and int(attempts)>5:
+        return JSONResponse(content={'error':'Rate Limit Exceeded, Try after 3 hours'}, status_code=429)
+
     raw = redis_client.get(f"otp:{email}")
     if not raw:
         return JSONResponse(content={"error": "OTP expired. Please register again."}, status_code=410)
@@ -64,6 +68,11 @@ async def verify_otp(payload: VerifyOTPRequest, db: AsyncSession = Depends(get_d
     pending = json.loads(raw)
 
     if str(entered_otp) != str(pending.get('otp')):
+
+        if not redis_client.get(f"attempts_otp:{email}"):
+            redis_client.setex(f"attempts_otp:{email}", 3*3600, 1)
+        else:
+            redis_client.incr(f"attempts_otp:{email}")
         return JSONResponse(content={"error": "Invalid OTP. Please try again."}, status_code=400)
 
     new_user = User(
@@ -88,6 +97,7 @@ async def verify_otp(payload: VerifyOTPRequest, db: AsyncSession = Depends(get_d
     )
 
     redis_client.delete(f"otp:{email}")
+    redis_client.delete(f"attempts_otp:{email}")
     return response
 
 @router.post('/login')

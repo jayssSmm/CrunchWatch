@@ -2,3 +2,4 @@ sqlalchemy
 psycopg2
 fastapi
 passlib>=1.7.4
+python-jose
