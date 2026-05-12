@@ -7,3 +7,7 @@ def generate_group_code() -> str:
         return ''.join(random.choices(string.ascii_lowercase, k=length))
 
     return f"{segment(10)}"
+
+def update_group(name, description):
+    if name:
+        name

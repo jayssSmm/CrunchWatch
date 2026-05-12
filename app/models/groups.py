@@ -1,7 +1,4 @@
-import uuid
-from datetime import datetime
-
-from sqlalchemy import Column, String, DateTime, ForeignKey, text
+from sqlalchemy import Column, String, DateTime, ForeignKey, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -32,5 +29,7 @@ class Group(Base):
         DateTime(timezone=True),
         server_default=func.now()
     )
+
+    description = Column(Text, nullable=True)
 
     creator = relationship("User", backref="groups")

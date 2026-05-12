@@ -12,3 +12,7 @@ class VerifyOTPRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password : str
+
+class groupPatch(BaseModel):
+    name: str
+    description: str
