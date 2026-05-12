@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from app.services.group_code import generate_group_code
 from app.models.groups import Group
@@ -49,3 +49,12 @@ async def all_user_groups(requests: Request, db : AsyncSession =  Depends(get_db
 
     return JSONResponse(content=json_user, status_code=200)
 
+@router.delete('/groups/{group_id}')
+async def delete_group(request: Request, db : AsyncSession = Depends(get_db())):
+    invite_code = request.invite_code
+
+    to_be_deleted = (await db.execute(select(Group).where(Group.invite_code==invite_code))).scalar_one_or_none()
+    if not to_be_deleted:
+        raise HTTPException(status_code=404, detail="Group not found")
+        
+    await db.delete(to_be_deleted)
