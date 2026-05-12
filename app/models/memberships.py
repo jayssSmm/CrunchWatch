@@ -40,6 +40,8 @@ class Membership(Base):
         UniqueConstraint("user_id", "group_id", name="uq_user_group"),
     )
 
+    group_name = Column(String(255), nullable=True)
+
     # relationships
     user = relationship("User", backref="memberships", passive_deletes=True)
     group = relationship("Group", backref="memberships", passive_deletes=True)
