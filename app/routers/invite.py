@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import groups, memberships
+from app.models import groups, memberships, user
 from app.extension import get_db
 from sqlalchemy import select
 from app.services.group_code import generate_group_code
@@ -69,6 +69,35 @@ async def regen_invite(
     await db.commit()
 
     return JSONResponse(content={'message':f'{new_code}'},status_code=200)
+
+@router.get('/groups/{group_id}/members')
+async def list_member(request: Request, db: AsyncSession = Depends(get_db())):
+    group_id = request.get('group_id')
+
+    group = (
+        await db.execute(
+            select(groups.Group).where(
+                groups.Group.id == group_id
+            ))
+    ).scalar_one_or_none()
+
+    if not group:
+        return JSONResponse(status_code=404, content={'error':"Group not found"})
+    
+    members = (await db.execute(
+        select(memberships.Membership)
+        .where(memberships.Membership.group_id==group_id, memberships.Membership.role=='member')
+    )).scalar().all()
+
+    members = [
+        (await db.execute(
+            select(user.User.name)
+            .where(member.id==user.User.id)
+        )).scalar_one_or_none()
+        for member in members
+    ]
+
+    return JSONResponse(content={'message':members},status_code=200)    
 
 @router.delete('/groups/{group_id}/members/{member_id}')
 async def remove_member(

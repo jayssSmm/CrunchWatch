@@ -72,5 +72,6 @@ async def delete_group(request: Request, db : AsyncSession = Depends(get_db())):
         raise HTTPException(status_code=404, detail="Group not found")
         
     await db.delete(to_be_deleted)
+    await db.commit()
 
     return JSONResponse(content={'ok':200},status_code=200)
