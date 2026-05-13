@@ -53,7 +53,7 @@ async def all_user_groups(requests: Request, db : AsyncSession =  Depends(get_db
 
 @router.patch('/groups/{group_id}')
 async def update(payload: groupPatch, db: AsyncSession = Depends(get_db())):
-    update_group(payload.name, payload.description)
+    update_group(payload.id, payload.name, payload.description, db)
 
 @router.delete('/groups/{group_id}')
 async def delete_group(request: Request, db : AsyncSession = Depends(get_db())):
