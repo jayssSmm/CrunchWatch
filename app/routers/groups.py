@@ -5,7 +5,6 @@ from app.models.groups import Group
 from app.models.memberships import Membership
 from app.extension import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
-from psycopg2 import errors
 from sqlalchemy import select
 from app.schema import groupPatch
 
