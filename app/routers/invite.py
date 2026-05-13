@@ -32,7 +32,22 @@ async def join(request: Request, db: AsyncSession = Depends(get_db())):
     return JSONResponse(content={'ok':'success'}, status_code=200)
 
 @router.post('/groups/{group_id}/regenerate-invite')
-async def regen_invite(request: Request, db: AsyncSession = Depends(get_db())):
+async def regen_invite(
+    request: Request, 
+    db: AsyncSession = Depends(get_db()),
+    current_user = Depends(get_current_user)):
+
+    group_id = request.get('group_id')
+    group = (await db.execute(
+        select(groups.Group).where(groups.Group.id==group_id)
+    )).scalar_one_or_none()
+
+    if not group:
+        return JSONResponse({'error': 'Group Not Found'}, status_code=404)
+    
+    if current_user.id != group.created_by:
+        raise HTTPException(status_code=403, detail="Only admin can change Invite-code")
+
     new_code = generate_group_code()
     old_code =  request.get('invite_code')  
 
@@ -71,7 +86,7 @@ async def remove_member(
     ).scalar_one_or_none()
 
     if not group:
-        raise HTTPException(status_code=404, detail="Group not found")
+        return JSONResponse(status_code=404, content={'error':"Group not found"})
 
     if group.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="Only admin can remove members")
