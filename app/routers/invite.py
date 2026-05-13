@@ -5,6 +5,7 @@ from app.models import groups, memberships
 from app.extension import get_db
 from sqlalchemy import select
 from app.services.group_code import generate_group_code
+from psycopg2 import errors
 
 router = APIRouter()
 
@@ -35,7 +36,16 @@ async def regen_invite(request: Request, db: AsyncSession = Depends(get_db())):
     new_code = generate_group_code()
     old_code =  request.get('invite_code')  
 
-    group = groups.Group(
+    while True:
+        code_check = (await db.execute(
+            select(groups.Group).where(groups.Group.invite_code==new_code)
+        )).scalar_one_or_none()
+
+        if not code_check:
+            break
+        new_code = generate_group_code()
+    
+    groups.Group(
         (await db.execute(
             select(groups.Group).where(groups.Group.invite_code==old_code)
         )).scalar_one_or_none()

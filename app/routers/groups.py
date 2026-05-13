@@ -21,19 +21,26 @@ async def admin_creates_code(request: Request, db: AsyncSession = Depends(get_db
     
     invite_code = generate_group_code()
 
-    try:
-        group = Group(
-            name=name,
-            created_by=user_id,
-            invite_code=invite_code,
-        )
-        db.add(group)
-        await db.commit()
+    while True:
+        code_check = (await db.execute(
+            select(Group).where(Group.invite_code==invite_code)
+        )).scalar_one_or_none()
 
-    except errors.UniqueViolation:
+        if not code_check:
+            break
         invite_code = generate_group_code()
-        db.add(group)
-        await db.commit()
+
+
+    group = Group(
+        name=name,
+        created_by=user_id,
+        invite_code=invite_code,
+    )
+
+    db.add(group)
+    await db.commit()
+
+    return JSONResponse(content={'ok':200},status_code=200)
 
 @router.get('/group/me')
 async def all_user_groups(requests: Request, db : AsyncSession =  Depends(get_db())):
@@ -55,6 +62,8 @@ async def all_user_groups(requests: Request, db : AsyncSession =  Depends(get_db
 async def update(payload: groupPatch, db: AsyncSession = Depends(get_db())):
     update_group(payload.id, payload.name, payload.description, db)
 
+    return JSONResponse(content={'ok':200},status_code=200)
+
 @router.delete('/groups/{group_id}')
 async def delete_group(request: Request, db : AsyncSession = Depends(get_db())):
     invite_code = request.invite_code
@@ -64,3 +73,5 @@ async def delete_group(request: Request, db : AsyncSession = Depends(get_db())):
         raise HTTPException(status_code=404, detail="Group not found")
         
     await db.delete(to_be_deleted)
+
+    return JSONResponse(content={'ok':200},status_code=200)
