@@ -54,3 +54,19 @@ async def regen_invite(request: Request, db: AsyncSession = Depends(get_db())):
     await db.commit()
 
     return JSONResponse(content={'message':f'{new_code}'},status_code=200)
+
+@router.delete('/groups/{group_id}/members/{user_id}')
+async def remove_member(request: Request, db: AsyncSession = Depends(get_db())):
+    member_id = request.get('id')
+    group_id = request.get('group_id')
+    if not member_id:
+        return JSONResponse(content={'error':'User Not Found'}, status_code=404)
+    
+    to_be_deleted = (await db.execute(
+        select(memberships.Membership)
+        .where(memberships.Membership.user_id==member_id and memberships.Membership.group_id==group_id))
+        ).scalar_one_or_none()
+    
+    await db.delete(to_be_deleted)
+
+    return JSONResponse(content={'ok':200},status_code=200)
